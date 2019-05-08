@@ -1,0 +1,102 @@
+#!/usr/bin/perl
+
+use strict;
+#use warnings;
+use Getopt::Std;
+
+#Este plugin permite saber el procentage de ram utilizado para nagios, escrito por:
+#Christopher Naranjo   <cnaranjo@nsoporte.com>
+
+my %opts=();
+getopts("w:c:", \%opts);
+my $war=$opts{w};
+my $crit=$opts{c};
+
+sub MSG {
+
+    print 'Usage: ./check_ram -w "warning value" -c "Critical value"';
+    print "\n ##### Values must be in percentage format ####\n";
+    exit 3;
+}
+
+
+#Validaciones de entrada
+unless ( defined $opts{c} )
+{ 
+  MSG();
+}
+
+unless ( defined $opts{w} )
+{
+  MSG();
+}
+
+
+
+
+#El valor critical debe ser mayor que el warning
+if ( $war >= $crit )
+{
+   print "Error: Warning Value can not be greater than or equal to Critical Value";
+   exit 3;
+}
+
+
+#Recojo la informacion del free 
+my $info = (`/usr/bin/free -m |grep Mem`);
+chomp ($info);
+
+#Metemos la info en un arreglo
+my @data = split(/\s+/, $info);
+
+#Calculamos Memoria total y Memoria usada
+my $mem_free = ( $data[1] - $data[2] );
+my $mem_total = $data[1];
+
+#porcentaje usado
+my $pmem_used = int( ($data[2] * 100) / $mem_total );
+
+
+#Analizamos los resultados deacuerdo a los datos ingresados
+my $exitcode;
+my $state;
+my $msg;
+
+
+
+
+if ( $pmem_used >= $crit )
+{
+   $state = "Critical";
+   $exitcode = 2;
+
+} else {
+
+if ( $pmem_used >= $war )
+{
+   $state = "Warning";
+   $exitcode = 1;
+
+} else {
+
+
+if ( $pmem_used < $war )
+{
+   $state = "Ok";
+   $exitcode = 0;
+
+} else {
+
+  $state = "Unknown";
+  $exitcode = 3;
+
+}
+}
+}
+
+#Datos para el performance de Nagios
+my $war_mem = int( ($mem_total * $war) / 100 );
+my $crit_mem = int( ($mem_total * $crit) / 100 );
+
+print "$state, Used ram $pmem_used% |Ram=$data[2]MB;$war_mem;$crit_mem;0;$mem_total";
+exit $exitcode;

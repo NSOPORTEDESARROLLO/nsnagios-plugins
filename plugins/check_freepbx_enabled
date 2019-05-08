@@ -1,0 +1,50 @@
+#!/usr/bin/perl
+
+use strict;
+use DBI;
+
+my $driver   = "SQLite";
+my $db_name = "/var/www/db/settings.db";
+my $dbd = "DBI:$driver:dbname=$db_name";
+
+# sqlite does not have a notion of username/password
+my $username = "";
+my $password = "";
+
+# create and connect to a database.
+# this will create a file named xmodulo.db
+my $dbh = DBI->connect($dbd, $username, $password, { RaiseError => 1 })
+or die $DBI::errstr;
+
+my $SQL = $dbh->prepare("select value from settings where key = 'activatedIssabelPBX'");
+$SQL->execute();
+
+my $ANS = $SQL->fetchrow_array();
+
+$SQL->finish();
+$dbh->disconnect();
+
+#Comparo resultados 1= enabled 2= disabled
+
+my $status;
+my $exit;
+my $opt;
+
+if ( $ANS eq "0" )
+{
+  $status = "Ok";
+  $exit = "0";
+  $opt = "disabled";
+
+} else {
+  $status = "Warning";
+  $exit = "1";
+  $opt = "enabled";
+}
+
+
+#Datos para Nagios
+print "$status: Advanced NSPBX is $opt";
+
+#Exit para nagios
+exit $exit;

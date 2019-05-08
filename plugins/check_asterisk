@@ -1,0 +1,171 @@
+#!/usr/bin/perl 
+
+use strict;
+use Asterisk::AMI;
+use Getopt::Std;
+
+my $status;
+my $exit;
+
+
+#Obtengo flags para las comparaciones
+my %opts=();
+getopts("w:c:x:z:p:u:s:h:v:", \%opts);
+
+#unless ( defined $opts{'v'} ){ &HELP(); exit 3;}
+unless ( defined $opts{'w'} ){ &HELP(); exit 3;}
+unless ( defined $opts{'c'} ){ &HELP(); exit 3;}
+unless ( defined $opts{'x'} ){ &HELP(); exit 3;}
+unless ( defined $opts{'z'} ){ &HELP(); exit 3;}
+unless ( defined $opts{'p'} ){ &HELP(); exit 3;}
+unless ( defined $opts{'u'} ){ &HELP(); exit 3;}
+unless ( defined $opts{'s'} ){ &HELP(); exit 3;}
+unless ( defined $opts{'h'} ){ &HELP(); exit 3;}
+
+#Comparo los valores validos
+&input_valid("CPU",$opts{w},$opts{c});
+&input_valid("MEM",$opts{x},$opts{z});
+
+#Conectando al manager de asterisk 
+my $astman = Asterisk::AMI->new(PeerAddr => $opts{h},
+                                        PeerPort => $opts{p},
+                                        Username => $opts{u},
+                                        Secret => $opts{s}
+                                );
+
+die  "Error: Can't connect to Asterisk Service or not Running" unless ($astman);
+
+
+my $ver = &get_ast_ver();
+my $res = &get_ast_res();
+
+
+#Inician las comparaciones para las alertas 
+my $test_cpu=&nagios_alert("CPU",$opts{w},$opts{c},${$res}[0]);
+my $test_mem=&nagios_alert("MEM",$opts{x},$opts{z},${$res}[1]);
+
+#print "${$test_cpu}[1]\n";  #debug
+#print "${$test_mem}[1]\n";  #debug
+
+if ( ${$test_cpu}[1] eq "2" || ${$test_mem}[1] eq "2" )
+{
+    $status = "Critical";
+    $exit = "2";
+} else
+  {
+
+    if ( ${$test_mem}[1] eq "0" )
+    {
+  
+      $status = ${$test_cpu}[0];
+      $exit = ${$test_cpu}[1];
+
+    } else {
+    $status = ${$test_mem}[0];
+    $exit = ${$test_mem}[1];
+    }
+}
+
+#Imprimiendo la salida para Nagios
+print "$status: Asterisk $ver running with CPU: ${$res}[0]% MEM: ${$res}[1]% |CPU=${$res}[0]%;$opts{w};$opts{c};0 MEM=${$res}[1]%;$opts{x};$opts{z};0";
+
+
+#Comparaciones tediosas pasa la salida de nagios
+sub nagios_alert
+{
+  my $name = $_[0];
+  my $vwar = $_[1];
+  my $vcrit = $_[2];
+  my $rval = $_[3];
+  my @info;
+
+
+  if ( $rval >= $vcrit )
+  {  
+     push @info, "Critical";
+     push @info, "2";
+   } else
+  {
+    if ( $rval >= $vwar )
+    {
+      push @info, "Warning";
+      push @info, "1"; 
+    } else
+    { 
+     push @info, "Ok";
+     push @info, "0";
+    }}
+
+return \@info;
+}
+
+
+
+#Otengo los recursos de la aplicacion
+sub get_ast_res 
+{
+
+ my $res = `ps -C asterisk -o %cpu,%mem |tail -1`;
+ my @res = split(/\s+/, $res);
+ shift @res;
+
+ return \@res;
+
+}
+
+
+#Ayuda para mostrar
+sub HELP 
+{
+
+ print "Usage: ./check_asterisk -params\n";
+ print "Params:        
+         -u = AMI user
+         -s = AMI secret
+         -p = AMI port
+         -h = AMI host
+         -w = CPU usage Warning 
+         -c = CPU usage Critical
+         -x = MEM usage Warning
+         -z = MEM usage Critical
+ ";
+
+}
+
+#Comparo los valores de entrada que sean validos &input_valid("warning","critical")
+sub input_valid
+{
+  my $war = $_[1];
+  my $crit = $_[2];
+  my $name = $_[0];
+
+  if ( $war >= $crit )
+  {
+    print "Error: $name critical value must be greater than Warning value\n";
+    &HELP();
+    exit 3;
+  }
+}
+
+#Obtengo la version de asterisk 
+sub get_ast_ver
+{
+  my $version;
+  my $cli = $astman->action({ Action => 'Command',
+                              Command => 'core show version' });
+
+  my $ver = $ { $cli } { CMD };
+  foreach (@{$ver})
+  {
+   my @tab = split(/\s+/, $_); 
+   #print "$tab[0] $tab[1]\n";
+   $version = "$tab[1]";
+  }
+
+return $version;
+}
+
+
+
+#Salida para nagios
+exit $exit;

@@ -1,0 +1,110 @@
+#!/usr/bin/perl 
+
+use strict;
+use List::Util qw(sum);
+use Getopt::Std;
+my ($prev_idle, $prev_total) = qw(0 0);
+my $exit;
+my $state;
+
+
+#Obtengo flags para las comparaciones
+my %opts=();
+getopts("w:c:", \%opts);
+my $war=$opts{w};
+my $crit=$opts{c};
+
+#Algunas comparaciones 
+unless ( defined $opts{c} )
+{ 
+  print "Error: Critical value missing\n";
+  &HELP;
+  exit 3;
+}
+
+unless ( defined $opts{w} )
+{
+  print "Error: Warning value missing\n";
+  &HELP;
+  exit 3;
+}
+
+
+if ( $opts{w} >= $opts{c} )
+{
+  print "Error: Critical value must be greater than Warning value\n";
+  &HELP;
+  exit 3;
+}
+
+#Obtengo el porcentage de uso redondeado 
+my @info = GETCPU();
+
+#inicia la comparacion de valores
+   #comparo el valor critico
+if ( $info[1] >= $crit )
+{
+   $state = "Critical";
+   $exit = "2";
+} else {
+
+   #Comparo el valor warning
+   if ( $info[1] >= $war )
+   { 
+   $state = "Warning";
+   $exit = "1";
+   } else {
+ 
+   $state =  "Ok";
+   $exit = "0";
+   } 
+
+}
+
+#Imprimimos mensaje para Nagios final
+print "$state: CPU USAGE $info[1]% |CPU=$info[1]%;$war;$crit;0;100";
+
+
+sub HELP
+{
+
+ print "Usage: ./check_cpu -w Warning Value -c Critical Value\n";
+ print "Note: Critical and Warning value must be in percentage format\n";
+
+}
+
+
+
+sub GETCPU 
+{
+
+my $usage;
+my @data;
+my @cpu;
+
+foreach my $value (`top -bn 5 |grep "Cpu(s)" |cut -d "," -f1 |cut -d ":" -f2 |awk '{print \$1\}'`)
+{     
+        chomp($value);
+        #print "$value\n";  #debug
+        push @cpu, $value;
+}
+       shift @cpu;
+       my $total = sum(@cpu);
+       #print "$total\n"; #debug
+
+       my $usage = $total / 4;
+
+       push @data, "$total";
+       my $rusage = sprintf("%.1f", $usage);
+       push @data, "$rusage";
+       push @data, "$usage";
+
+
+
+
+return @data;
+
+}
+
+####Salida para nagios
+exit $exit;
